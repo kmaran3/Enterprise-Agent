@@ -1,0 +1,124 @@
+[
+  {
+    "id": 1,
+    "question": "What is the reimbursement limit for a business meal per person?",
+    "expectedAnswer": "$75 per person.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+  {
+    "id": 2,
+    "question": "How many PTO days do eligible full-time employees accrue each calendar year?",
+    "expectedAnswer": "15 days per calendar year.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 3,
+    "question": "Within how many hours of discovery must a security incident be reported?",
+    "expectedAnswer": "Within 24 hours of discovery.",
+    "sourceDocs": ["it_security_policy.pdf"]
+  },
+  {
+    "id": 4,
+    "question": "What is the maximum reimbursable hotel expense per night before taxes and mandatory fees?",
+    "expectedAnswer": "$250 per night excluding applicable taxes and mandatory fees.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+
+  {
+    "id": 5,
+    "question": "An employee plans a vacation next month. How many PTO days do eligible full-time employees accrue each year and how far in advance should the PTO request be submitted?",
+    "expectedAnswer": "Eligible full-time employees accrue 15 PTO days per year and should submit foreseeable PTO requests at least 5 business days in advance.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 6,
+    "question": "An employee submits a $600 expense with a receipt. What additional approval requirement applies and why?",
+    "expectedAnswer": "Manager approval is required because any individual expense exceeding $500 requires manager approval.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+  {
+    "id": 7,
+    "question": "What are the password length and password rotation requirements for company accounts?",
+    "expectedAnswer": "Passwords must contain at least 12 characters and must be changed every 90 days.",
+    "sourceDocs": ["it_security_policy.pdf"]
+  },
+  {
+    "id": 8,
+    "question": "After becoming eligible for remote work, how many days per week may an employee work remotely and when does that eligibility begin?",
+    "expectedAnswer": "Employees may work remotely up to 2 days per week after completing 6 months of continuous employment, subject to manager approval.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 9,
+    "question": "A traveler submits a $40 meal expense 20 days after it occurred. What documentation requirement applies and was the submission deadline met?",
+    "expectedAnswer": "A receipt is required because the expense exceeds $25, and the deadline was met because expense reports must be submitted within 30 days.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+  {
+    "id": 10,
+    "question": "A laptop used to access customer data is lost. What security protections should have been in place on the device?",
+    "expectedAnswer": "The laptop should have been encrypted using approved encryption technology, and systems containing customer data require multi-factor authentication.",
+    "sourceDocs": ["it_security_policy.pdf"]
+  },
+  {
+    "id": 11,
+    "question": "A full-time employee ends the year with 18 unused PTO days. How many days can be carried over and how many will be forfeited?",
+    "expectedAnswer": "10 PTO days may be carried over and 8 PTO days will be forfeited unless otherwise required by law.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 12,
+    "question": "A business traveler spends $240 on a hotel room and $80 on dinner. Which expense falls within company reimbursement limits and which exceeds them?",
+    "expectedAnswer": "The $240 hotel expense is within the $250 lodging limit, while the $80 meal exceeds the $75 meal reimbursement limit.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+
+  {
+    "id": 13,
+    "question": "A newly hired full-time employee has completed the 90-day probationary period and wants to participate in the remote work program. Are they eligible, and why?",
+    "expectedAnswer": "No. Completing the 90-day probationary period does not make an employee eligible for remote work. Employees must complete 6 months of continuous employment before becoming eligible.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 14,
+    "question": "A company-owned laptop that accesses customer data is compromised. What authentication requirement, device protection requirement, and reporting requirement apply?",
+    "expectedAnswer": "Multi-factor authentication is required for systems containing customer data, company laptops must be encrypted using approved encryption technology, and the incident must be reported within 24 hours of discovery.",
+    "sourceDocs": ["it_security_policy.pdf"]
+  },
+  {
+    "id": 15,
+    "question": "An employee submits a $550 conference expense with receipts 40 days after attending the event. What policy issues must be addressed before reimbursement can occur?",
+    "expectedAnswer": "The expense requires manager approval because it exceeds $500, additional approvals may be required because it is a conference expense, and the submission is late because expense reports must be submitted within 30 days.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+  {
+    "id": 16,
+    "question": "An employee has worked for the company for 7 months and has 14 unused PTO days at year-end. How many PTO days can be carried over, and is the employee eligible for remote work?",
+    "expectedAnswer": "The employee may carry over 10 PTO days and is eligible for remote work because they have completed more than 6 months of continuous employment.",
+    "sourceDocs": ["hr_policy.pdf"]
+  },
+  {
+    "id": 17,
+    "question": "An employee wants reimbursement for a $70 business meal purchased during a remote work day. According to company policies, is the employee eligible for remote work and is the meal within reimbursement limits?",
+    "expectedAnswer": "The employee may be eligible for remote work after completing 6 months of continuous employment and obtaining manager approval. The $70 meal is within the $75 meal reimbursement limit.",
+    "sourceDocs": ["hr_policy.pdf, expense_policy.pdf"]
+  },
+  {
+    "id": 18,
+    "question": "An employee who has worked for the company for 8 months receives a phishing email while working remotely. What reporting timeline applies, and what remote work condition must already have been satisfied?",
+    "expectedAnswer": "The phishing incident must be reported within 24 hours of discovery. To be working remotely under policy, the employee must have completed at least 6 months of continuous employment and received manager approval.",
+    "sourceDocs": ["it_security_policy.pdf, hr_policy.pdf"]
+  },
+  {
+    "id": 19,
+    "question": "An employee submits a $600 reimbursement request 45 days after the expense occurred and claims they were traveling for an international conference. What approval and timing requirements apply?",
+    "expectedAnswer": "Manager approval is required because the expense exceeds $500, additional approvals may be required because it involves international travel and a conference, and the request is late because expense reports must be submitted within 30 days.",
+    "sourceDocs": ["expense_policy.pdf"]
+  },
+  {
+    "id": 20,
+    "question": "A full-time employee who has completed 7 months of employment ends the year with 12 unused PTO days and uses a company laptop to access customer data while working remotely. How many PTO days can be carried over, what remote work eligibility requirement has been met, and what security controls apply to the laptop?",
+    "expectedAnswer": "The employee may carry over 10 PTO days. The employee has met the 6-month employment requirement for remote work eligibility. The laptop must be encrypted using approved encryption technology, and systems containing customer data require multi-factor authentication.",
+    "sourceDocs": ["hr_policy.pdf, it_security_policy.pdf"]
+  }
+]

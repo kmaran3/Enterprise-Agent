@@ -133,6 +133,48 @@ REACT_APP_API_URL=http://localhost:8000
 
 ---
 
+## Phase 1.5: Create Sample Documents (Day 1, after setup)
+
+Do this before touching any ingestion code. What's in your documents determines what your eval set can test, which determines whether your accuracy numbers are meaningful or arbitrary. Building the pipeline before you have documents is building blind.
+
+Create three realistic fake company policy PDFs. Write them yourself — do not download public PDFs. You need to control exactly what facts are in them so you can write unambiguous eval questions later.
+
+### Documents to create
+
+**`sample_docs/hr_policy.pdf`**
+Include specific, testable facts:
+- PTO accrual rate (e.g. "15 days per year")
+- PTO request notice period (e.g. "5 business days in advance")
+- Maximum PTO carryover (e.g. "10 days maximum")
+- Probationary period for new hires (e.g. "90 days")
+- Remote work policy (e.g. "up to 2 days per week after 6 months")
+
+**`sample_docs/expense_policy.pdf`**
+Include specific, testable facts:
+- Business meal reimbursement cap (e.g. "$75 per person")
+- Hotel nightly limit (e.g. "$250 per night")
+- Approval required above threshold (e.g. "manager approval required for expenses over $500")
+- Receipt requirement (e.g. "receipts required for all expenses over $25")
+- Submission deadline (e.g. "within 30 days of the expense")
+
+**`sample_docs/it_security_policy.pdf`**
+Include specific, testable facts:
+- Password minimum length (e.g. "12 characters minimum")
+- Password rotation requirement (e.g. "every 90 days")
+- MFA requirement (e.g. "required for all systems containing customer data")
+- Device encryption requirement (e.g. "all laptops must be encrypted")
+- Incident reporting window (e.g. "security incidents must be reported within 24 hours")
+
+### How to create the PDFs
+
+Use Google Docs or Word — write the content, then export as PDF. Aim for 1-2 pages per document. The content should read like real policy documents: sections, headers, numbered rules.
+
+### Why this order matters
+
+You're going to write 20 eval questions in Phase 5 *before* you write the eval code. Those questions need to be grounded in specific facts from these documents. If you write the documents after the pipeline is built, you'll be tempted to reverse-engineer easy questions — which defeats the purpose of the eval entirely.
+
+---
+
 ## Phase 2: Pinecone Index + Ingestion Pipeline (Day 2)
 
 ### 2.1 Create the Pinecone Index
@@ -244,10 +286,15 @@ export async function getRetriever(topK: number = 4) {
 ```
 
 ### 3.2 Build `backend/src/agent.ts`
+
+> **Why LCEL instead of `RetrievalQAChain`:** `RetrievalQAChain` is deprecated in current LangChain versions. The modern pattern is LCEL — LangChain Expression Language — which uses a pipe (`|`) syntax to compose steps explicitly. LCEL gives you more control, is easier to debug, and is what you'll see in production LangChain codebases. If an interviewer asks why you used this approach, the answer is: "I deliberately avoided the deprecated abstraction because I wanted explicit control over each step in the chain and visibility into what's being passed between them."
+
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { RetrievalQAChain } from "langchain/chains";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
+import { Document } from "@langchain/core/documents";
 import { getRetriever } from "./retriever";
 
 const PROMPT_TEMPLATE = `You are an enterprise document assistant. Use only the 
@@ -266,6 +313,11 @@ export interface QAResult {
   sources: string[];
 }
 
+// Formats retrieved Document objects into a single context string for the prompt
+function formatDocs(docs: Document[]): string {
+  return docs.map((doc) => doc.pageContent).join("\n\n");
+}
+
 export async function queryDocuments(question: string): Promise<QAResult> {
   const llm = new ChatOpenAI({
     model: "gpt-4o-mini",
@@ -273,29 +325,33 @@ export async function queryDocuments(question: string): Promise<QAResult> {
   });
 
   const retriever = await getRetriever(4);
-
   const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
 
-  const chain = RetrievalQAChain.fromLLM(llm, retriever, {
-    returnSourceDocuments: true,
-    combineDocumentsChain: undefined,
-  });
+  // Retrieve documents separately so we can return sources alongside the answer
+  const retrievedDocs = await retriever.invoke(question);
 
-  const result = await chain.invoke({ query: question });
+  // LCEL chain: format context + pass question → prompt → LLM → parse output
+  const chain = RunnableSequence.from([
+    {
+      context: () => formatDocs(retrievedDocs),
+      question: new RunnablePassthrough(),
+    },
+    prompt,
+    llm,
+    new StringOutputParser(),
+  ]);
+
+  const answer = await chain.invoke(question);
 
   const sources: string[] = [
     ...new Set(
-      (result.sourceDocuments ?? []).map(
-        (doc: { metadata: { doc_id?: string } }) =>
-          doc.metadata?.doc_id ?? "unknown"
+      retrievedDocs.map(
+        (doc) => doc.metadata?.doc_id ?? "unknown"
       )
     ),
   ];
 
-  return {
-    answer: result.text,
-    sources,
-  };
+  return { answer, sources };
 }
 ```
 
@@ -417,6 +473,29 @@ export interface QueryResponse {
 export interface IngestResponse {
   chunksIngested: number;
   docId: string;
+}
+
+// Eval types — mirrored from backend so the dashboard can consume /evals response
+export type FailureType = "retrieval" | "generation" | "none";
+
+export interface EvalResult {
+  id: number;
+  question: string;
+  expected: string;
+  agentAnswer: string;
+  correct: boolean;
+  failureType: FailureType;
+  retrievedSourceDocs: string[];
+  expectedSourceDoc: string;
+}
+
+export interface EvalMetrics {
+  accuracy: number;
+  total: number;
+  correct: number;
+  retrievalFailures: number;
+  generationFailures: number;
+  results: EvalResult[];
 }
 ```
 
@@ -607,11 +686,137 @@ export const ChatInterface: React.FC = () => {
 };
 ```
 
-### 4.4 Update `frontend/src/App.tsx`
+### 4.5 Create `frontend/src/components/EvalDashboard.tsx`
+
+> **Why build this:** The eval dashboard is what turns your eval numbers from a terminal printout into something a recruiter or interviewer can actually see during a live demo. It also forces you to think about how to present failure types visually — retrieval failures vs generation failures — which is a talking point on its own.
+
+```tsx
+import React, { useState } from "react";
+import axios from "axios";
+import { EvalMetrics, EvalResult } from "../types";
+
+const API_URL = process.env.REACT_APP_API_URL ?? "http://localhost:8000";
+
+export const EvalDashboard: React.FC = () => {
+  const [metrics, setMetrics] = useState<EvalMetrics | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const runEvals = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.get<EvalMetrics>(`${API_URL}/evals`);
+      setMetrics(res.data);
+    } catch {
+      setError("Eval run failed. Make sure the backend is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const failureBadge = (result: EvalResult) => {
+    if (result.correct) return null;
+    const label =
+      result.failureType === "retrieval" ? "Retrieval Failure" : "Generation Failure";
+    const color = result.failureType === "retrieval" ? "#f59e0b" : "#ef4444";
+    return (
+      <span style={{ fontSize: 11, background: color, color: "white", borderRadius: 4, padding: "2px 6px", marginLeft: 8 }}>
+        {label}
+      </span>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: "2rem" }}>
+      <h2 style={{ marginBottom: 8 }}>Eval Dashboard</h2>
+      <p style={{ color: "#666", marginTop: 0, fontSize: 14 }}>
+        Runs the full 20-question eval set against live documents. Takes ~1 minute.
+      </p>
+      <button
+        onClick={runEvals}
+        disabled={loading}
+        style={{
+          padding: "8px 20px",
+          background: "#7c3aed",
+          color: "white",
+          border: "none",
+          borderRadius: 6,
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.7 : 1,
+          marginBottom: "1.5rem",
+        }}
+      >
+        {loading ? "Running evals..." : "Run Evals"}
+      </button>
+
+      {error && <p style={{ color: "red" }}>{error}</p>}
+
+      {metrics && (
+        <div>
+          {/* Summary row */}
+          <div style={{ display: "flex", gap: 24, marginBottom: "1.5rem" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#16a34a" }}>
+                {(metrics.accuracy * 100).toFixed(0)}%
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>Accuracy</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#f59e0b" }}>
+                {metrics.retrievalFailures}
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>Retrieval Failures</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#ef4444" }}>
+                {metrics.generationFailures}
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>Generation Failures</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 700 }}>{metrics.total}</div>
+              <div style={{ fontSize: 12, color: "#666" }}>Total Questions</div>
+            </div>
+          </div>
+
+          {/* Results table */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
+                <th style={{ padding: "8px 4px" }}>Q</th>
+                <th style={{ padding: "8px 4px" }}>Question</th>
+                <th style={{ padding: "8px 4px" }}>Result</th>
+                <th style={{ padding: "8px 4px" }}>Agent Answer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.results.map((r) => (
+                <tr key={r.id} style={{ borderBottom: "1px solid #eee", background: r.correct ? "transparent" : "#fff5f5" }}>
+                  <td style={{ padding: "8px 4px", color: "#666" }}>{r.id}</td>
+                  <td style={{ padding: "8px 4px" }}>{r.question}</td>
+                  <td style={{ padding: "8px 4px", whiteSpace: "nowrap" }}>
+                    {r.correct ? "✓" : "✗"}
+                    {failureBadge(r)}
+                  </td>
+                  <td style={{ padding: "8px 4px", color: "#444" }}>{r.agentAnswer}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+### 4.6 Update `frontend/src/App.tsx`
 ```tsx
 import React, { useState } from "react";
 import { FileUpload } from "./components/FileUpload";
 import { ChatInterface } from "./components/ChatInterface";
+import { EvalDashboard } from "./components/EvalDashboard";
 
 const App: React.FC = () => {
   const [, setDocsLoaded] = useState(false);
@@ -633,6 +838,8 @@ const App: React.FC = () => {
       <hr style={{ margin: "1.5rem 0" }} />
       <FileUpload onUploadSuccess={() => setDocsLoaded(true)} />
       <ChatInterface />
+      <hr style={{ margin: "1.5rem 0" }} />
+      <EvalDashboard />
     </div>
   );
 };
@@ -640,13 +847,13 @@ const App: React.FC = () => {
 export default App;
 ```
 
-### 4.5 Test Frontend Locally
+### 4.7 Test Frontend Locally
 ```bash
 cd frontend
 npm start
 ```
 
-Make sure your backend is still running. Upload a PDF and test end-to-end before moving to evals.
+Make sure your backend is still running. Upload a PDF and test end-to-end before moving to evals. The EvalDashboard won't work yet — that's expected, the `/evals` endpoint doesn't exist until Phase 5.
 
 ---
 
@@ -655,7 +862,16 @@ Make sure your backend is still running. Upload a PDF and test end-to-end before
 This is the most important phase for FDE interviews. Don't skip it.
 
 ### 5.1 Create `eval_data/test_questions.json`
-Write 20 questions based on your sample documents:
+
+Write 20 questions based on your sample documents. Do this **before** writing any eval code — it forces you to think like a tester, not a builder.
+
+Mix question difficulty deliberately:
+- **Easy (8 questions):** single fact, exact match — "What is the maximum meal reimbursement?" Answer is one sentence, lives in one chunk.
+- **Medium (8 questions):** require combining two facts — "What approval is required for expenses over the hotel limit?" Answer spans multiple sentences.
+- **Hard (4 questions):** require reasoning across sections — "Under what conditions can a remote employee be required to come in?" Tests whether retrieval surfaces the right policy section.
+
+The `sourceDoc` field is critical — it's how you detect retrieval failures later.
+
 ```json
 [
   {
@@ -672,17 +888,24 @@ Write 20 questions based on your sample documents:
   }
 ]
 ```
-Mix easy, medium, and hard retrieval questions. Write these before you write the eval code — it forces you to think like a tester, not a builder.
 
 ### 5.2 Build `backend/src/evals.ts`
+
+> **Why track failure types:** Knowing your accuracy is 67% tells you the system is broken. Knowing that 80% of failures are retrieval failures tells you *where* to fix it — chunk size and top-K, not the prompt. This is the difference between a number and a diagnosis. It's also a much more interesting interview story.
+>
+> **How failure type detection works:** After getting the agent's answer, we check whether the `sourceDoc` from the eval question appears in the list of documents the retriever actually surfaced. If the right document wasn't retrieved, that's a retrieval failure — the LLM never had a chance. If the right document *was* retrieved but the answer is still wrong, that's a generation failure — the LLM saw the answer and still got it wrong.
+
 ```typescript
 import * as fs from "fs";
 import * as path from "path";
 import { ChatOpenAI } from "@langchain/openai";
 import { queryDocuments } from "./agent";
+import { getRetriever } from "./retriever";
 import * as dotenv from "dotenv";
 
 dotenv.config();
+
+type FailureType = "retrieval" | "generation" | "none";
 
 interface TestQuestion {
   id: number;
@@ -697,16 +920,21 @@ interface EvalResult {
   expected: string;
   agentAnswer: string;
   correct: boolean;
+  failureType: FailureType;
+  retrievedSourceDocs: string[];
+  expectedSourceDoc: string;
 }
 
-interface EvalMetrics {
+export interface EvalMetrics {
   accuracy: number;
   total: number;
   correct: number;
+  retrievalFailures: number;
+  generationFailures: number;
   results: EvalResult[];
 }
 
-async function runEvals(
+export async function runEvals(
   questionsPath: string = "../../eval_data/test_questions.json"
 ): Promise<EvalMetrics> {
   const questions: TestQuestion[] = JSON.parse(
@@ -714,13 +942,20 @@ async function runEvals(
   );
 
   const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 });
+  const retriever = await getRetriever(4);
   const results: EvalResult[] = [];
 
   for (const q of questions) {
-    // Get the agent's answer
+    // 1. Run retrieval separately to inspect which docs were surfaced
+    const retrievedDocs = await retriever.invoke(q.question);
+    const retrievedSourceDocs = retrievedDocs.map(
+      (doc) => doc.metadata?.doc_id ?? "unknown"
+    );
+
+    // 2. Get the agent's answer
     const { answer: agentAnswer } = await queryDocuments(q.question);
 
-    // LLM-as-judge: compare agent answer to expected answer
+    // 3. LLM-as-judge: did the agent answer correctly?
     const judgePrompt = `
 Expected answer: ${q.expectedAnswer}
 Agent answer: ${agentAnswer}
@@ -731,24 +966,40 @@ Reply with only: CORRECT or INCORRECT`;
     const judgment = await judgeLlm.invoke(judgePrompt);
     const correct = judgment.content.toString().trim() === "CORRECT";
 
+    // 4. Classify failure type
+    // If wrong: was the source doc even retrieved? If not → retrieval failure.
+    // If source doc was retrieved but still wrong → generation failure.
+    let failureType: FailureType = "none";
+    if (!correct) {
+      const sourceWasRetrieved = retrievedSourceDocs.includes(q.sourceDoc);
+      failureType = sourceWasRetrieved ? "generation" : "retrieval";
+    }
+
     results.push({
       id: q.id,
       question: q.question,
       expected: q.expectedAnswer,
       agentAnswer,
       correct,
+      failureType,
+      retrievedSourceDocs,
+      expectedSourceDoc: q.sourceDoc,
     });
 
-    console.log(`Q${q.id}: ${correct ? "✓" : "✗"} ${q.question}`);
+    const tag = correct ? "✓" : `✗ [${failureType}]`;
+    console.log(`Q${q.id}: ${tag} ${q.question}`);
   }
 
   const correctCount = results.filter((r) => r.correct).length;
-  const accuracy = correctCount / results.length;
+  const retrievalFailures = results.filter((r) => r.failureType === "retrieval").length;
+  const generationFailures = results.filter((r) => r.failureType === "generation").length;
 
   return {
-    accuracy,
+    accuracy: correctCount / results.length,
     total: results.length,
     correct: correctCount,
+    retrievalFailures,
+    generationFailures,
     results,
   };
 }
@@ -758,11 +1009,16 @@ runEvals().then((metrics) => {
   console.log(
     `\nAccuracy: ${(metrics.accuracy * 100).toFixed(1)}% (${metrics.correct}/${metrics.total})`
   );
+  console.log(`Retrieval failures: ${metrics.retrievalFailures}`);
+  console.log(`Generation failures: ${metrics.generationFailures}`);
   console.log("\nFailed questions:");
   metrics.results
     .filter((r) => !r.correct)
     .forEach((r) => {
       console.log(`  Q: ${r.question}`);
+      console.log(`  Failure type: ${r.failureType}`);
+      console.log(`  Expected doc: ${r.expectedSourceDoc}`);
+      console.log(`  Retrieved docs: ${r.retrievedSourceDocs.join(", ")}`);
       console.log(`  Expected: ${r.expected}`);
       console.log(`  Got: ${r.agentAnswer}\n`);
     });
@@ -793,14 +1049,16 @@ npx ts-node src/evals.ts
 
 **The iteration loop — this is what you talk about in interviews:**
 
-| Experiment | Change | Accuracy |
-|---|---|---|
-| Baseline | chunkSize=500, topK=4 | ~65% |
-| Experiment 1 | chunkSize=300, topK=6 | measure |
-| Experiment 2 | chunkSize=500, topK=4, better prompt | measure |
-| Experiment 3 | chunkSize=300, topK=8 | measure |
+| Experiment | Change | Accuracy | Retrieval Failures | Generation Failures |
+|---|---|---|---|---|
+| Baseline | chunkSize=500, topK=4 | measure | measure | measure |
+| Experiment 1 | chunkSize=300, topK=6 | measure | measure | measure |
+| Experiment 2 | chunkSize=500, topK=4, better prompt | measure | measure | measure |
+| Experiment 3 | chunkSize=300, topK=8 | measure | measure | measure |
 
-Track these in your README. The experiments and measurements are the interview story.
+The failure type columns are the key upgrade over the original plan. If Experiment 1 reduces retrieval failures but increases generation failures, that tells you something specific: smaller chunks are surfacing the right document but losing enough context that the LLM can't synthesize the answer. That's a real engineering insight, not just a number going up.
+
+Track all of this in your README.
 
 ---
 
@@ -885,10 +1143,10 @@ PDF Upload → Express API → LangChain.js → Pinecone (vector search)
 → GPT-4o-mini → React UI
 
 ### Eval Results
-| Experiment | Chunk Size | Top-K | Accuracy |
-|---|---|---|---|
-| Baseline | 500 | 4 | 67% |
-| Best config | 300 | 6 | 81% |
+| Experiment | Chunk Size | Top-K | Accuracy | Retrieval Failures | Generation Failures |
+|---|---|---|---|---|---|
+| Baseline | 500 | 4 | X% | X | X |
+| Best config | 300 | 6 | X% | X | X |
 
 ### Business Problem
 Enterprise employees spend significant time manually searching policy documents.
@@ -904,9 +1162,10 @@ Built and deployed a full-stack RAG application in TypeScript (Node.js + Express
 backend, React frontend) using LangChain.js and Pinecone, enabling natural 
 language querying of enterprise documents — deployed live on Railway
 
-Implemented an LLM-as-judge eval framework across 20 test cases, running 
-controlled experiments across chunking strategies and retrieval parameters 
-to improve answer accuracy from 67% to 81%
+Implemented an LLM-as-judge eval framework across 20 test cases that classifies 
+failures as retrieval failures vs generation failures, running controlled experiments 
+across chunking strategies and retrieval parameters to improve answer accuracy 
+from X% to Y%
 ```
 
 ---
@@ -915,11 +1174,11 @@ to improve answer accuracy from 67% to 81%
 
 | Day | Focus |
 |---|---|
-| Day 1 | Environment setup, accounts, dependencies |
-| Day 2 | Pinecone index, ingestion pipeline, sample docs |
+| Day 1 | Environment setup, accounts, dependencies, create sample documents |
+| Day 2 | Pinecone index, ingestion pipeline |
 | Day 3 | Express backend, test with curl |
-| Day 4 | React + TypeScript frontend, end-to-end local test |
-| Day 5 | Eval framework, run experiments, track results |
+| Day 4 | React + TypeScript frontend including EvalDashboard, end-to-end local test |
+| Day 5 | Eval framework with failure type tracking, run experiments, track results |
 | Day 6 | Deploy to Railway |
 | Day 7 | README, resume bullets, GitHub polish |
 
@@ -932,7 +1191,7 @@ When an FDE interviewer asks about this project, lead with:
 1. **The business problem** — "Enterprise employees waste hours manually searching policy docs. I built a system that reduces that to a sub-second natural language query."
 2. **The stack choice** — "I used TypeScript across the full stack — Node.js backend and React frontend — because that's the standard pattern at AI-native startups and it reduces context switching across the codebase."
 3. **The architecture decision** — "I chose Pinecone over an in-memory store because it's production-grade and scales to millions of vectors — the kind of scale you'd actually hit at an enterprise client."
-4. **The eval layer** — "I built an LLM-as-judge eval set of 20 questions and ran experiments across chunking strategies. Accuracy went from 67% to 81% by reducing chunk size and increasing top-k retrieval."
-5. **What would break at scale** — "The main failure point at enterprise scale would be document freshness — I'd add a webhook-triggered re-ingestion pipeline when source docs are updated, and rate limiting on the query endpoint."
+4. **The eval layer** — "I built an LLM-as-judge eval set of 20 questions that tracks not just accuracy but failure type — retrieval failures vs generation failures. That distinction tells you whether to fix chunking strategy or the prompt. Accuracy went from X% to Y% once I identified that most failures were retrieval failures and increased top-K."
+5. **What would break at scale** — "Three things. First, document freshness — if a policy changes, stale vectors stay in Pinecone until someone re-ingests. I'd add a webhook-triggered re-ingestion pipeline tied to the document source. Second, multi-tenancy — right now all documents share one Pinecone index, so HR and Finance can query each other's documents. In production you'd namespace by department or use separate indexes. Third, cost — every query hits OpenAI twice: once for the question embedding and once for the LLM call. At 10,000 queries a day that's a real line item. I'd add a semantic cache to serve repeated questions without hitting the API."
 
-That last point — proactively identifying what breaks — is exactly what separates FDE candidates in interviews.
+That last point — proactively identifying what breaks and knowing the fix — is exactly what separates FDE candidates in interviews. Notice the answer isn't just "it would be slow" — it's a specific failure mode with a specific production solution for each one.

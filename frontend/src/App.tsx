@@ -1,26 +1,32 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from "react";
+import { FileUpload } from "./components/FileUpload";
+import { ChatInterface } from "./components/ChatInterface";
+import { EvalDashboard } from "./components/EvalDashboard";
 
-function App() {
+const App: React.FC = () => {
+  const [, setDocsLoaded] = useState(false);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div
+      style={{
+        maxWidth: 800,
+        margin: "0 auto",
+        padding: "2rem",
+        fontFamily: "sans-serif",
+      }}
+    >
+      <h1 style={{ marginBottom: 4 }}>Enterprise Document Assistant</h1>
+      <p style={{ color: "#666", marginTop: 0 }}>
+        Upload internal company documents (SOPs, policies, contracts) and
+        query them in natural language.
+      </p>
+      <hr style={{ margin: "1.5rem 0" }} />
+      <FileUpload onUploadSuccess={() => setDocsLoaded(true)} />
+      <ChatInterface />
+      <hr style={{ margin: "1.5rem 0" }} />
+      <EvalDashboard />
     </div>
   );
-}
+};
 
 export default App;
