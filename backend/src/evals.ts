@@ -108,21 +108,23 @@ Reply with only: CORRECT or INCORRECT`;
 }
 
 // Run directly: ts-node src/evals.ts
-runEvals().then((metrics) => {
-  console.log(
-    `\nAccuracy: ${(metrics.accuracy * 100).toFixed(1)}% (${metrics.correct}/${metrics.total})`
-  );
-  console.log(`Retrieval failures: ${metrics.retrievalFailures}`);
-  console.log(`Generation failures: ${metrics.generationFailures}`);
-  console.log("\nFailed questions:");
-  metrics.results
-    .filter((r) => !r.correct)
-    .forEach((r) => {
-      console.log(`  Q: ${r.question}`);
-      console.log(`  Failure type: ${r.failureType}`);
-      console.log(`  Expected doc: ${r.expectedSourceDoc}`);
-      console.log(`  Retrieved docs: ${r.retrievedSourceDocs.join(", ")}`);
-      console.log(`  Expected: ${r.expected}`);
-      console.log(`  Got: ${r.agentAnswer}\n`);
-    });
-});
+if (require.main == module) {
+  runEvals().then((metrics) => {
+    console.log(
+      `\nAccuracy: ${(metrics.accuracy * 100).toFixed(1)}% (${metrics.correct}/${metrics.total})`
+    );
+    console.log(`Retrieval failures: ${metrics.retrievalFailures}`);
+    console.log(`Generation failures: ${metrics.generationFailures}`);
+    console.log("\nFailed questions:");
+    metrics.results
+      .filter((r) => !r.correct)
+      .forEach((r) => {
+        console.log(`  Q: ${r.question}`);
+        console.log(`  Failure type: ${r.failureType}`);
+        console.log(`  Expected doc: ${r.expectedSourceDoc}`);
+        console.log(`  Retrieved docs: ${r.retrievedSourceDocs.join(", ")}`);
+        console.log(`  Expected: ${r.expected}`);
+        console.log(`  Got: ${r.agentAnswer}\n`);
+      });
+  });
+}
