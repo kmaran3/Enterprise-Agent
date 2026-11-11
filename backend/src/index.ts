@@ -74,6 +74,7 @@ app.get("/evals", async (_req: Request, res: Response) => {
     const metrics = await runEvals();
     res.json(metrics);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Eval run failed" });
   }
 });

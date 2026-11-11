@@ -37,7 +37,7 @@ export interface EvalMetrics {
 }
 
 export async function runEvals(
-  questionsPath: string = "../../eval_data/test_questions.json"
+  questionsPath: string = "../eval_data/test_questions.json"
 ): Promise<EvalMetrics> {
   const questions: TestQuestion[] = JSON.parse(
     fs.readFileSync(path.resolve(__dirname, questionsPath), "utf-8")
