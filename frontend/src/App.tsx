@@ -27,7 +27,7 @@ const App: React.FC = () => {
           setUploadedDocs((prev) => (prev.includes(docId) ? prev : [...prev, docId]))
         }
       />
-      <ChatInterface />
+      <ChatInterface uploadedDocs={uploadedDocs} />
       <hr style={{ margin: "1.5rem 0" }} />
       <EvalDashboard uploadedDocs={uploadedDocs} />
     </div>

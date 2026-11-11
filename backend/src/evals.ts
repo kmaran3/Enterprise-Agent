@@ -57,10 +57,9 @@ export async function runEvals(
     fs.readFileSync(path.resolve(__dirname, questionsPath), "utf-8")
   );
 
-  const retriever = await getRetriever(AGENT_TOP_K);
-
-  // Questions are written against specific docs — check they're all indexed
+  // Questions are written against specific docs — search only those, and check they're all indexed
   const requiredDocs = [...new Set(questions.flatMap((q) => q.sourceDocs))];
+  const retriever = await getRetriever(AGENT_TOP_K, requiredDocs);
   const missingDocs: string[] = [];
   for (const doc of requiredDocs) {
     const hits = await retriever.vectorStore.similaritySearch(doc, 1, { doc_id: doc });
@@ -68,7 +67,7 @@ export async function runEvals(
   }
   if (missingDocs.length > 0) throw new MissingEvalDocsError(missingDocs);
 
-  return scoreQuestions(questions, retriever);
+  return scoreQuestions(questions, requiredDocs);
 }
 
 const generatedQuestionsSchema = z.object({
@@ -80,10 +79,16 @@ const generatedQuestionsSchema = z.object({
   ),
 });
 
-// Reason comes first so the judge explains before deciding
+// The judge checks each expected fact; correctness is decided in code from its checklist
 const judgmentSchema = z.object({
+  keyFacts: z.array(
+    z.object({
+      fact: z.string(),
+      inAgentAnswer: z.boolean(),
+    })
+  ).describe("Each key fact in the expected answer, and whether the agent answer states it"),
+  contradicts: z.boolean().describe("Whether the agent answer contradicts the expected answer"),
   reason: z.string().describe("One sentence on why the answer is or isn't correct"),
-  correct: z.boolean(),
 });
 
 // Builds a test set from the doc's own text: an LLM writes questions and
@@ -123,7 +128,8 @@ export async function runDocEvals(
   docIds: string[],
   questionsPerDoc: number = 5
 ): Promise<EvalMetrics> {
-  const retriever = await getRetriever(AGENT_TOP_K);
+  // Search only the docs being evaluated, not everything else in the index
+  const retriever = await getRetriever(AGENT_TOP_K, docIds);
 
   const questions: TestQuestion[] = [];
   for (const docId of docIds) {
@@ -131,13 +137,14 @@ export async function runDocEvals(
     generated.forEach((q) => questions.push({ ...q, id: questions.length + 1 }));
   }
 
-  return scoreQuestions(questions, retriever);
+  return scoreQuestions(questions, docIds);
 }
 
 async function scoreQuestions(
   questions: TestQuestion[],
-  retriever: Retriever
+  docIds: string[]
 ): Promise<EvalMetrics> {
+  const retriever = await getRetriever(AGENT_TOP_K, docIds);
   const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 })
     .withStructuredOutput(judgmentSchema);
   const results: EvalResult[] = [];
@@ -150,7 +157,7 @@ async function scoreQuestions(
     );
 
     // 2. Get the agent's answer
-    const { answer: agentAnswer } = await queryDocuments(q.question);
+    const { answer: agentAnswer } = await queryDocuments(q.question, docIds);
 
     // 3. LLM-as-judge: did the agent answer correctly?
     const judgePrompt = `
@@ -160,13 +167,19 @@ Question: ${q.question}
 Expected answer: ${q.expectedAnswer}
 Agent answer: ${agentAnswer}
 
-Does the agent answer correctly capture the key information in the expected answer?
-Treat the expected answer as true, even if it mentions dates, people or facts you
-don't recognise or that seem to be in the future. Don't use your own knowledge.
-Extra detail or explanation in the agent answer is fine.`;
+1. Break the expected answer into its key facts (numbers, names, rules, conditions, conclusions).
+2. For each fact, decide whether the agent answer states it. It counts if the meaning is the
+   same, even with different wording, synonyms, abbreviations or a fuller official name
+   (e.g. "NYU" = "New York University"). Extra detail in the agent answer doesn't matter.
+3. Decide whether the agent answer contradicts the expected answer.
+Treat the expected answer as true, even if it mentions dates, people or facts you don't
+recognise or that seem to be in the future. Don't use your own knowledge.`;
 
     const judgment = await judgeLlm.invoke(judgePrompt);
-    const correct = judgment.correct;
+    const correct =
+      judgment.keyFacts.length > 0 &&
+      judgment.keyFacts.every((f) => f.inAgentAnswer) &&
+      !judgment.contradicts;
 
     // 4. Classify failure type
     // If wrong: was the source doc even retrieved? If not → retrieval failure.

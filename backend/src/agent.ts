@@ -40,13 +40,16 @@ function formatDocs(docs: Document[]): string {
   return docs.map((doc) => doc.pageContent).join("\n\n");
 }
 
-export async function queryDocuments(question: string): Promise<QAResult> {
+export async function queryDocuments(
+  question: string,
+  docIds?: string[]
+): Promise<QAResult> {
   const llm = new ChatOpenAI({
     model: "gpt-4o-mini",
     temperature: 0,
   });
 
-  const retriever = await getRetriever(AGENT_TOP_K);
+  const retriever = await getRetriever(AGENT_TOP_K, docIds);
   const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
 
   // Retrieve documents separately so we can return sources alongside the answer

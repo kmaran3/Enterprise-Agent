@@ -188,7 +188,7 @@ export const EvalDashboard: React.FC<Props> = ({ uploadedDocs }) => {
       <h3 style={{ marginBottom: 4, fontSize: 16 }}>Evaluate your documents</h3>
       <p style={{ color: "#666", marginTop: 0, fontSize: 14 }}>
         Generates 5 questions per document from its own text, then has the agent
-        answer them and grades each answer. Questions and expected answers are
+        answer them, searching only the selected documents, and grades each answer. Questions and expected answers are
         written by an LLM, so check the Expected column before trusting the
         score. Up to {MAX_EVAL_DOCS} documents per run.
       </p>
@@ -225,8 +225,8 @@ export const EvalDashboard: React.FC<Props> = ({ uploadedDocs }) => {
       <h3 style={{ marginBottom: 4, fontSize: 16 }}>Sample benchmark</h3>
       <p style={{ color: "#666", marginTop: 0, fontSize: 14 }}>
         A fixed 20-question benchmark with hand-written expected answers, covering
-        only the three sample policy docs. The agent answers live each run, so the
-        score can shift if other uploaded documents crowd out the sample ones.
+        only the three sample policy docs (and searching only those). The agent
+        answers live each run, so the score can shift slightly between runs.
         Takes ~1 minute. Sample docs:{" "}
         {sampleDocs.map((doc, i) => (
           <span key={doc}>

@@ -54,14 +54,15 @@ app.post(
 
 // Query documents
 app.post("/query", async (req: Request, res: Response) => {
-  const { question } = req.body as { question?: string };
+  const { question, docIds } = req.body as { question?: string; docIds?: string[] };
   if (!question) {
     res.status(400).json({ error: "question is required" });
     return;
   }
 
   try {
-    const result = await queryDocuments(question);
+    // Search only the caller's docs when given, so other uploads don't leak in
+    const result = await queryDocuments(question, docIds);
     res.json(result);
   } catch (err) {
     console.error(err);

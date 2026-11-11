@@ -4,13 +4,17 @@ import { Message, QueryResponse } from "../types";
 
 const API_URL = process.env.REACT_APP_API_URL ?? "http://localhost:8000";
 
-export const ChatInterface: React.FC = () => {
+interface Props {
+  uploadedDocs: string[];
+}
+
+export const ChatInterface: React.FC<Props> = ({ uploadedDocs }) => {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handleAsk = async () => {
-    if (!question.trim()) return;
+    if (!question.trim() || uploadedDocs.length === 0) return;
     setLoading(true);
 
     const userMessage: Message = { role: "user", text: question };
@@ -18,8 +22,10 @@ export const ChatInterface: React.FC = () => {
     setQuestion("");
 
     try {
+      // Only search docs uploaded this session, not everything in the index
       const res = await axios.post<QueryResponse>(`${API_URL}/query`, {
         question,
+        docIds: uploadedDocs,
       });
       const agentMessage: Message = {
         role: "agent",
@@ -100,19 +106,23 @@ export const ChatInterface: React.FC = () => {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a question about your documents..."
+          placeholder={
+            uploadedDocs.length === 0
+              ? "Upload a document first..."
+              : "Ask a question about your documents..."
+          }
         />
         <button
           onClick={handleAsk}
-          disabled={loading}
+          disabled={loading || uploadedDocs.length === 0}
           style={{
             padding: "8px 20px",
             background: "#0070f3",
             color: "white",
             border: "none",
             borderRadius: 6,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
+            cursor: loading || uploadedDocs.length === 0 ? "not-allowed" : "pointer",
+            opacity: loading || uploadedDocs.length === 0 ? 0.7 : 1,
           }}
         >
           Ask
