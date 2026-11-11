@@ -5,7 +5,7 @@ import { IngestResponse } from "../types";
 const API_URL = process.env.REACT_APP_API_URL ?? "http://localhost:8000";
 
 interface Props {
-  onUploadSuccess: () => void;
+  onUploadSuccess: (docId: string) => void;
 }
 
 export const FileUpload: React.FC<Props> = ({ onUploadSuccess }) => {
@@ -20,7 +20,6 @@ export const FileUpload: React.FC<Props> = ({ onUploadSuccess }) => {
     setMessages([]);
 
     // Upload one at a time so each file gets its own result
-    let anySucceeded = false;
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
@@ -35,7 +34,7 @@ export const FileUpload: React.FC<Props> = ({ onUploadSuccess }) => {
           ...prev,
           `✓ Ingested ${res.data.chunksIngested} chunks from ${file.name}`,
         ]);
-        anySucceeded = true;
+        onUploadSuccess(res.data.docId);
       } catch {
         setMessages((prev) => [
           ...prev,
@@ -46,7 +45,6 @@ export const FileUpload: React.FC<Props> = ({ onUploadSuccess }) => {
 
     setUploading("");
     e.target.value = ""; // allow re-selecting the same files
-    if (anySucceeded) onUploadSuccess();
   };
 
   return (

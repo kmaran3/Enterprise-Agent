@@ -23,7 +23,6 @@
     "expectedAnswer": "$250 per night excluding applicable taxes and mandatory fees.",
     "sourceDocs": ["expense_policy.pdf"]
   },
-
   {
     "id": 5,
     "question": "An employee plans a vacation next month. How many PTO days do eligible full-time employees accrue each year and how far in advance should the PTO request be submitted?",
@@ -72,7 +71,6 @@
     "expectedAnswer": "The $240 hotel expense is within the $250 lodging limit, while the $80 meal exceeds the $75 meal reimbursement limit.",
     "sourceDocs": ["expense_policy.pdf"]
   },
-
   {
     "id": 13,
     "question": "A newly hired full-time employee has completed the 90-day probationary period and wants to participate in the remote work program. Are they eligible, and why?",
@@ -101,13 +99,13 @@
     "id": 17,
     "question": "An employee wants reimbursement for a $70 business meal purchased during a remote work day. According to company policies, is the employee eligible for remote work and is the meal within reimbursement limits?",
     "expectedAnswer": "The employee may be eligible for remote work after completing 6 months of continuous employment and obtaining manager approval. The $70 meal is within the $75 meal reimbursement limit.",
-    "sourceDocs": ["hr_policy.pdf, expense_policy.pdf"]
+    "sourceDocs": ["hr_policy.pdf", "expense_policy.pdf"]
   },
   {
     "id": 18,
     "question": "An employee who has worked for the company for 8 months receives a phishing email while working remotely. What reporting timeline applies, and what remote work condition must already have been satisfied?",
     "expectedAnswer": "The phishing incident must be reported within 24 hours of discovery. To be working remotely under policy, the employee must have completed at least 6 months of continuous employment and received manager approval.",
-    "sourceDocs": ["it_security_policy.pdf, hr_policy.pdf"]
+    "sourceDocs": ["it_security_policy.pdf", "hr_policy.pdf"]
   },
   {
     "id": 19,
@@ -119,6 +117,6 @@
     "id": 20,
     "question": "A full-time employee who has completed 7 months of employment ends the year with 12 unused PTO days and uses a company laptop to access customer data while working remotely. How many PTO days can be carried over, what remote work eligibility requirement has been met, and what security controls apply to the laptop?",
     "expectedAnswer": "The employee may carry over 10 PTO days. The employee has met the 6-month employment requirement for remote work eligibility. The laptop must be encrypted using approved encryption technology, and systems containing customer data require multi-factor authentication.",
-    "sourceDocs": ["hr_policy.pdf, it_security_policy.pdf"]
+    "sourceDocs": ["hr_policy.pdf", "it_security_policy.pdf"]
   }
 ]

@@ -4,7 +4,8 @@ import { ChatInterface } from "./components/ChatInterface";
 import { EvalDashboard } from "./components/EvalDashboard";
 
 const App: React.FC = () => {
-  const [, setDocsLoaded] = useState(false);
+  // Docs uploaded this session, offered for per-document evals
+  const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
 
   return (
     <div
@@ -21,10 +22,14 @@ const App: React.FC = () => {
         query them in natural language.
       </p>
       <hr style={{ margin: "1.5rem 0" }} />
-      <FileUpload onUploadSuccess={() => setDocsLoaded(true)} />
+      <FileUpload
+        onUploadSuccess={(docId) =>
+          setUploadedDocs((prev) => (prev.includes(docId) ? prev : [...prev, docId]))
+        }
+      />
       <ChatInterface />
       <hr style={{ margin: "1.5rem 0" }} />
-      <EvalDashboard />
+      <EvalDashboard uploadedDocs={uploadedDocs} />
     </div>
   );
 };

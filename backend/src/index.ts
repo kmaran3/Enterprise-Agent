@@ -6,7 +6,7 @@ import * as path from "path";
 import * as dotenv from "dotenv";
 import { ingestDocument } from "./ingest";
 import { queryDocuments } from "./agent";
-import { runEvals, MissingEvalDocsError } from "./evals";
+import { runEvals, runDocEvals, MissingEvalDocsError } from "./evals";
 
 dotenv.config();
 
@@ -72,6 +72,33 @@ app.post("/query", async (req: Request, res: Response) => {
 app.get("/evals", async (_req: Request, res: Response) => {
   try {
     const metrics = await runEvals();
+    res.json(metrics);
+  } catch (err) {
+    if (err instanceof MissingEvalDocsError) {
+      res.status(409).json({ error: err.message, missingDocs: err.missingDocs });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: "Eval run failed" });
+  }
+});
+
+// Eval the user's own docs with generated questions; capped to keep runs ~1 minute
+const MAX_EVAL_DOCS = 4;
+
+app.post("/evals/docs", async (req: Request, res: Response) => {
+  const { docIds } = req.body as { docIds?: string[] };
+  if (!Array.isArray(docIds) || docIds.length === 0) {
+    res.status(400).json({ error: "docIds is required" });
+    return;
+  }
+  if (docIds.length > MAX_EVAL_DOCS) {
+    res.status(400).json({ error: `At most ${MAX_EVAL_DOCS} documents per eval run` });
+    return;
+  }
+
+  try {
+    const metrics = await runDocEvals(docIds);
     res.json(metrics);
   } catch (err) {
     if (err instanceof MissingEvalDocsError) {

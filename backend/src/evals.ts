@@ -4,10 +4,15 @@ import { ChatOpenAI } from "@langchain/openai";
 import { queryDocuments } from "./agent";
 import { getRetriever } from "./retriever";
 import * as dotenv from "dotenv";
+import { z } from "zod";
 
 dotenv.config();
 
 type FailureType = "retrieval" | "generation" | "none";
+type Retriever = Awaited<ReturnType<typeof getRetriever>>;
+
+// Upper bound on chunks pulled per doc when generating questions (~300 chars each)
+const MAX_SOURCE_CHUNKS = 60;
 
 interface TestQuestion {
   id: number;
@@ -51,7 +56,6 @@ export async function runEvals(
     fs.readFileSync(path.resolve(__dirname, questionsPath), "utf-8")
   );
 
-  const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 });
   const retriever = await getRetriever(4);
 
   // Questions are written against specific docs — check they're all indexed
@@ -63,6 +67,71 @@ export async function runEvals(
   }
   if (missingDocs.length > 0) throw new MissingEvalDocsError(missingDocs);
 
+  return scoreQuestions(questions, retriever);
+}
+
+const generatedQuestionsSchema = z.object({
+  questions: z.array(
+    z.object({
+      question: z.string(),
+      expectedAnswer: z.string(),
+    })
+  ),
+});
+
+// Builds a test set from the doc's own text: an LLM writes questions and
+// answers from its chunks, then they're scored exactly like the benchmark
+async function generateQuestions(
+  docId: string,
+  count: number,
+  retriever: Retriever
+): Promise<Omit<TestQuestion, "id">[]> {
+  const chunks = await retriever.vectorStore.similaritySearch(docId, MAX_SOURCE_CHUNKS, {
+    doc_id: docId,
+  });
+  if (chunks.length === 0) throw new MissingEvalDocsError([docId]);
+
+  const docText = chunks
+    .sort((a, b) => (a.metadata.chunk_index ?? 0) - (b.metadata.chunk_index ?? 0))
+    .map((chunk) => chunk.pageContent)
+    .join("\n\n");
+
+  const generatorLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0.3 })
+    .withStructuredOutput(generatedQuestionsSchema);
+
+  const { questions } = await generatorLlm.invoke(`
+Write ${count} test questions for a document Q&A assistant, based only on the document below.
+Each question must be answerable from a specific fact in the document (a number, rule,
+deadline, requirement or name), and the expected answer must state that fact concisely.
+Spread the questions across different parts of the document. Don't ask about anything
+the document doesn't state.
+
+Document (${docId}):
+${docText}`);
+
+  return questions.slice(0, count).map((q) => ({ ...q, sourceDocs: [docId] }));
+}
+
+export async function runDocEvals(
+  docIds: string[],
+  questionsPerDoc: number = 5
+): Promise<EvalMetrics> {
+  const retriever = await getRetriever(4);
+
+  const questions: TestQuestion[] = [];
+  for (const docId of docIds) {
+    const generated = await generateQuestions(docId, questionsPerDoc, retriever);
+    generated.forEach((q) => questions.push({ ...q, id: questions.length + 1 }));
+  }
+
+  return scoreQuestions(questions, retriever);
+}
+
+async function scoreQuestions(
+  questions: TestQuestion[],
+  retriever: Retriever
+): Promise<EvalMetrics> {
+  const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 });
   const results: EvalResult[] = [];
 
   for (const q of questions) {
