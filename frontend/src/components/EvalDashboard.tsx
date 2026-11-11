@@ -4,6 +4,9 @@ import { EvalMetrics, EvalResult } from "../types";
 
 const API_URL = process.env.REACT_APP_API_URL ?? "http://localhost:8000";
 
+// Served from public/sample_docs — the docs the benchmark questions are written against
+const sampleDocs = ["expense_policy.pdf", "hr_policy.pdf", "it_security_policy.pdf"];
+
 export const EvalDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<EvalMetrics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,8 +18,15 @@ export const EvalDashboard: React.FC = () => {
     try {
       const res = await axios.get<EvalMetrics>(`${API_URL}/evals`);
       setMetrics(res.data);
-    } catch {
-      setError("Eval run failed. Make sure the backend is running.");
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        const missing: string[] = err.response.data.missingDocs ?? [];
+        setError(
+          `Benchmark docs not uploaded: ${missing.join(", ")}. Download them above and upload them first.`
+        );
+      } else {
+        setError("Eval run failed. Make sure the backend is running.");
+      }
     } finally {
       setLoading(false);
     }
@@ -38,7 +48,18 @@ export const EvalDashboard: React.FC = () => {
     <div style={{ marginTop: "2rem" }}>
       <h2 style={{ marginBottom: 8 }}>Eval Dashboard</h2>
       <p style={{ color: "#666", marginTop: 0, fontSize: 14 }}>
-        Runs the full 20-question eval set against live documents. Takes ~1 minute.
+        Runs a fixed 20-question benchmark with hand-written expected answers.
+        The questions only cover the three sample policy docs, so it doesn't
+        score other documents you upload. Takes ~1 minute.
+      </p>
+      <p style={{ color: "#666", marginTop: 0, fontSize: 14 }}>
+        Sample docs:{" "}
+        {sampleDocs.map((doc, i) => (
+          <span key={doc}>
+            {i > 0 && " · "}
+            <a href={`/sample_docs/${doc}`} download>{doc}</a>
+          </span>
+        ))}
       </p>
       <button
         onClick={runEvals}

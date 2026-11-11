@@ -6,7 +6,7 @@ import * as path from "path";
 import * as dotenv from "dotenv";
 import { ingestDocument } from "./ingest";
 import { queryDocuments } from "./agent";
-import { runEvals } from "./evals"; 
+import { runEvals, MissingEvalDocsError } from "./evals";
 
 dotenv.config();
 
@@ -74,6 +74,10 @@ app.get("/evals", async (_req: Request, res: Response) => {
     const metrics = await runEvals();
     res.json(metrics);
   } catch (err) {
+    if (err instanceof MissingEvalDocsError) {
+      res.status(409).json({ error: err.message, missingDocs: err.missingDocs });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Eval run failed" });
   }

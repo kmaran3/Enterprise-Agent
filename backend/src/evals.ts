@@ -36,6 +36,14 @@ export interface EvalMetrics {
   results: EvalResult[];
 }
 
+// Thrown when the benchmark's source docs aren't in the index, so we don't
+// spend a full run producing a meaningless score
+export class MissingEvalDocsError extends Error {
+  constructor(public missingDocs: string[]) {
+    super(`Eval source docs not in index: ${missingDocs.join(", ")}`);
+  }
+}
+
 export async function runEvals(
   questionsPath: string = "../eval_data/test_questions.json"
 ): Promise<EvalMetrics> {
@@ -45,6 +53,16 @@ export async function runEvals(
 
   const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 });
   const retriever = await getRetriever(4);
+
+  // Questions are written against specific docs — check they're all indexed
+  const requiredDocs = [...new Set(questions.flatMap((q) => q.sourceDocs))];
+  const missingDocs: string[] = [];
+  for (const doc of requiredDocs) {
+    const hits = await retriever.vectorStore.similaritySearch(doc, 1, { doc_id: doc });
+    if (hits.length === 0) missingDocs.push(doc);
+  }
+  if (missingDocs.length > 0) throw new MissingEvalDocsError(missingDocs);
+
   const results: EvalResult[] = [];
 
   for (const q of questions) {
