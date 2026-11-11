@@ -23,9 +23,10 @@ export interface EvalResult {
   expected: string;
   agentAnswer: string;
   correct: boolean;
+  judgeReason: string;
   failureType: FailureType;
   retrievedSourceDocs: string[];
-  expectedSourceDocs: string;
+  expectedSourceDoc: string[];
 }
 
 export interface EvalMetrics {
@@ -35,4 +36,5 @@ export interface EvalMetrics {
   retrievalFailures: number;
   generationFailures: number;
   results: EvalResult[];
+  ranAt?: string; // set on saved benchmark runs
 }

@@ -27,6 +27,7 @@ interface EvalResult {
   expected: string;
   agentAnswer: string;
   correct: boolean;
+  judgeReason: string;
   failureType: FailureType;
   retrievedSourceDocs: string[];
   expectedSourceDoc: string[];
@@ -77,6 +78,12 @@ const generatedQuestionsSchema = z.object({
       expectedAnswer: z.string(),
     })
   ),
+});
+
+// Reason comes first so the judge explains before deciding
+const judgmentSchema = z.object({
+  reason: z.string().describe("One sentence on why the answer is or isn't correct"),
+  correct: z.boolean(),
 });
 
 // Builds a test set from the doc's own text: an LLM writes questions and
@@ -131,7 +138,8 @@ async function scoreQuestions(
   questions: TestQuestion[],
   retriever: Retriever
 ): Promise<EvalMetrics> {
-  const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 });
+  const judgeLlm = new ChatOpenAI({ model: "gpt-4o-mini", temperature: 0 })
+    .withStructuredOutput(judgmentSchema);
   const results: EvalResult[] = [];
 
   for (const q of questions) {
@@ -146,14 +154,19 @@ async function scoreQuestions(
 
     // 3. LLM-as-judge: did the agent answer correctly?
     const judgePrompt = `
+You are grading a document Q&A assistant against an answer key.
+
+Question: ${q.question}
 Expected answer: ${q.expectedAnswer}
 Agent answer: ${agentAnswer}
 
 Does the agent answer correctly capture the key information in the expected answer?
-Reply with only: CORRECT or INCORRECT`;
+Treat the expected answer as true, even if it mentions dates, people or facts you
+don't recognise or that seem to be in the future. Don't use your own knowledge.
+Extra detail or explanation in the agent answer is fine.`;
 
     const judgment = await judgeLlm.invoke(judgePrompt);
-    const correct = judgment.content.toString().trim() === "CORRECT";
+    const correct = judgment.correct;
 
     // 4. Classify failure type
     // If wrong: was the source doc even retrieved? If not → retrieval failure.
@@ -171,6 +184,7 @@ Reply with only: CORRECT or INCORRECT`;
       expected: q.expectedAnswer,
       agentAnswer,
       correct,
+      judgeReason: judgment.reason,
       failureType,
       retrievedSourceDocs,
       expectedSourceDoc: q.sourceDocs,

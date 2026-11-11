@@ -6,7 +6,7 @@ import * as path from "path";
 import * as dotenv from "dotenv";
 import { ingestDocument } from "./ingest";
 import { queryDocuments } from "./agent";
-import { runEvals, runDocEvals, MissingEvalDocsError } from "./evals";
+import { runEvals, runDocEvals, MissingEvalDocsError, EvalMetrics } from "./evals";
 
 dotenv.config();
 
@@ -69,10 +69,34 @@ app.post("/query", async (req: Request, res: Response) => {
   }
 });
 
+// Latest benchmark result, so the dashboard can show it without re-running.
+// Kept in /tmp: survives a crash restart, cleared by a redeploy.
+type StoredBenchmark = EvalMetrics & { ranAt: string };
+const latestBenchmarkPath = path.join("/tmp", "latest_benchmark.json");
+
+function loadLatestBenchmark(): StoredBenchmark | null {
+  try {
+    return JSON.parse(fs.readFileSync(latestBenchmarkPath, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+app.get("/evals/latest", (_req: Request, res: Response) => {
+  const latest = loadLatestBenchmark();
+  if (!latest) {
+    res.status(404).json({ error: "No benchmark run yet" });
+    return;
+  }
+  res.json(latest);
+});
+
 app.get("/evals", async (_req: Request, res: Response) => {
   try {
     const metrics = await runEvals();
-    res.json(metrics);
+    const stored: StoredBenchmark = { ...metrics, ranAt: new Date().toISOString() };
+    fs.writeFileSync(latestBenchmarkPath, JSON.stringify(stored));
+    res.json(stored);
   } catch (err) {
     if (err instanceof MissingEvalDocsError) {
       res.status(409).json({ error: err.message, missingDocs: err.missingDocs });
