@@ -15,6 +15,7 @@ export async function getRetriever(topK: number = 10) {
 
   const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
     pineconeIndex: index,
+    namespace: process.env.PINECONE_NAMESPACE,
   });
 
   return vectorStore.asRetriever({ k: topK });

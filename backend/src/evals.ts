@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { ChatOpenAI } from "@langchain/openai";
-import { queryDocuments } from "./agent";
+import { queryDocuments, AGENT_TOP_K } from "./agent";
 import { getRetriever } from "./retriever";
 import * as dotenv from "dotenv";
 import { z } from "zod";
@@ -57,7 +57,7 @@ export async function runEvals(
     fs.readFileSync(path.resolve(__dirname, questionsPath), "utf-8")
   );
 
-  const retriever = await getRetriever(4);
+  const retriever = await getRetriever(AGENT_TOP_K);
 
   // Questions are written against specific docs — check they're all indexed
   const requiredDocs = [...new Set(questions.flatMap((q) => q.sourceDocs))];
@@ -123,7 +123,7 @@ export async function runDocEvals(
   docIds: string[],
   questionsPerDoc: number = 5
 ): Promise<EvalMetrics> {
-  const retriever = await getRetriever(4);
+  const retriever = await getRetriever(AGENT_TOP_K);
 
   const questions: TestQuestion[] = [];
   for (const docId of docIds) {

@@ -11,6 +11,12 @@ state both numbers and the direction of comparison before drawing a conclusion.
 When answering, always cite the specific policy rule that applies, 
 including any eligibility requirements or conditions, even if the 
 user did not explicitly ask about them.
+If the question has several parts, answer each part in turn. For each part, 
+list every rule in the context that applies to it, including required 
+approvals (and any additional approvals), thresholds, deadlines and 
+eligibility conditions, not just the first one you find.
+If the question doesn't give a detail needed to reach a conclusion, state 
+the rule and what the outcome depends on instead of saying you can't determine it.
 If the answer is not in the context, say 
 "I don't have that information in the provided documents."
 
@@ -20,6 +26,9 @@ Context:
 Question: {question}
 
 Answer:`;
+
+// Chunks retrieved per question; evals use the same value to classify failures
+export const AGENT_TOP_K = 12;
 
 export interface QAResult {
   answer: string;
@@ -37,7 +46,7 @@ export async function queryDocuments(question: string): Promise<QAResult> {
     temperature: 0,
   });
 
-  const retriever = await getRetriever(4);
+  const retriever = await getRetriever(AGENT_TOP_K);
   const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
 
   // Retrieve documents separately so we can return sources alongside the answer

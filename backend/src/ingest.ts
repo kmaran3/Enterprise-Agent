@@ -2,7 +2,7 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { PineconeStore } from "@langchain/pinecone";
-import { Pinecone } from "@pinecone-database/pinecone";
+import { Pinecone, Errors } from "@pinecone-database/pinecone";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -46,10 +46,17 @@ export async function ingestDocument(
   });
 
   // Delete existing vectors for this document before upserting new ones
-  await index.deleteMany({ doc_id: docId });
+  const namespace = process.env.PINECONE_NAMESPACE;
+  try {
+    await (namespace ? index.namespace(namespace) : index).deleteMany({ doc_id: docId });
+  } catch (err) {
+    // Pinecone 404s when the namespace is empty — nothing to delete
+    if (!(err instanceof Errors.PineconeNotFoundError)) throw err;
+  }
 
   await PineconeStore.fromDocuments(chunks, embeddings, {
     pineconeIndex: index,
+    namespace,
   });
 
   return { chunksIngested: chunks.length, docId };
